@@ -22,6 +22,15 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Smarter Scheduling
+
+Phase 3 added four algorithmic improvements to the scheduler:
+
+- **Sort by time** — `Scheduler.sort_by_time()` returns the scheduled task list in ascending chronological order using a `lambda` key on `due_time`, so pet care is always shown in the order it needs to happen.
+- **Filter tasks** — `Scheduler.filter_tasks(pet_name=..., completed=...)` lets you slice the owner's task list by pet name, completion status, or both. Useful for viewing only Luna's pending tasks or checking what's already done.
+- **Recurring tasks** — `Task` now accepts a `frequency` field (`"daily"` or `"weekly"`). When `Scheduler.complete_task(task)` is called, `mark_complete()` automatically returns a new `Task` shifted forward by `timedelta(days=1)` or `timedelta(weeks=1)`, and the scheduler adds it to the owner's task list so it appears in the next generated plan.
+- **Conflict detection** — `Scheduler.detect_conflicts()` scans scheduled tasks for exact `due_time` matches and returns a list of human-readable warning strings. It uses a dictionary keyed on `datetime` for an O(n) single-pass check.
+
 ## Getting started
 
 ### Setup

@@ -39,6 +39,10 @@ The original UML had no link between Task and Pet. It only connected Task to Own
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
 
+The conflict detector uses exact-minute matching: two tasks conflict only if their `due_time` fields are identical down to the minute. It will miss overlapping durations (e.g., a 30-min walk at 08:00 and a 20-min grooming at 08:15 would not be flagged even though they overlap until 08:30).
+
+This is reasonable for a pet-care scheduler because most tasks are not strictly time-blocked — "due at 07:30" means "around 07:30." Exact-time detection catches the clearest double-booking mistakes without requiring the extra complexity of tracking start/end windows for every task. Duration-aware overlap checking would be the logical next step if this evolved into a full calendar tool.
+
 ---
 
 ## 3. AI Collaboration

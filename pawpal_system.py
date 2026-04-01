@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from enum import Enum
 from typing import Optional
 
@@ -57,10 +57,36 @@ class Task:
     due_time: datetime
     pet: Optional["Pet"] = None
     completed: bool = False
+    frequency: Optional[str] = None  # "daily", "weekly", or None
 
-    def mark_complete(self) -> None:
-        """Mark this task as completed."""
+    def mark_complete(self) -> Optional["Task"]:
+        """Mark this task as completed.
+
+        If the task has a frequency of 'daily' or 'weekly', a new Task instance
+        is returned representing the next occurrence. Returns None otherwise.
+        """
         self.completed = True
+        if self.frequency == "daily":
+            return Task(
+                title=self.title,
+                task_type=self.task_type,
+                duration=self.duration,
+                priority=self.priority,
+                due_time=self.due_time + timedelta(days=1),
+                pet=self.pet,
+                frequency=self.frequency,
+            )
+        if self.frequency == "weekly":
+            return Task(
+                title=self.title,
+                task_type=self.task_type,
+                duration=self.duration,
+                priority=self.priority,
+                due_time=self.due_time + timedelta(weeks=1),
+                pet=self.pet,
+                frequency=self.frequency,
+            )
+        return None
 
     def update_priority(self, priority: Priority) -> None:
         """Update the task's priority level."""
@@ -152,6 +178,67 @@ class Scheduler:
     def get_explanation(self) -> str:
         """Return the plain-text explanation of the current plan."""
         return self.explanation
+
+    def sort_by_time(self) -> list[Task]:
+        """Return scheduled tasks sorted ascending by due time.
+
+        Uses a lambda key on the due_time datetime so tasks display in
+        chronological order regardless of the order they were added.
+        """
+        return sorted(self.scheduled_tasks, key=lambda t: t.due_time)
+
+    def filter_tasks(
+        self,
+        *,
+        pet_name: Optional[str] = None,
+        completed: Optional[bool] = None,
+    ) -> list[Task]:
+        """Return owner tasks filtered by pet name and/or completion status.
+
+        Both filters are optional and can be combined. Passing no arguments
+        returns all tasks unmodified.
+
+        Args:
+            pet_name: If provided, keep only tasks linked to this pet.
+            completed: If provided, keep only tasks whose completed flag matches.
+        """
+        tasks: list[Task] = self.owner.tasks
+        if pet_name is not None:
+            tasks = [t for t in tasks if t.pet and t.pet.name == pet_name]
+        if completed is not None:
+            tasks = [t for t in tasks if t.completed == completed]
+        return tasks
+
+    def detect_conflicts(self) -> list[str]:
+        """Detect scheduled tasks that share the same exact due time.
+
+        Returns a list of human-readable warning strings. An empty list means
+        no conflicts were found. The check uses exact-minute matching, so two
+        tasks at 08:00 conflict even if their durations don't overlap.
+        """
+        warnings: list[str] = []
+        seen: dict[datetime, Task] = {}
+        for task in self.scheduled_tasks:
+            if task.due_time in seen:
+                other = seen[task.due_time]
+                warnings.append(
+                    f"⚠ Conflict: '{task.title}' and '{other.title}' "
+                    f"are both due at {task.due_time.strftime('%I:%M %p')}."
+                )
+            else:
+                seen[task.due_time] = task
+        return warnings
+
+    def complete_task(self, task: Task) -> None:
+        """Mark a task complete and auto-schedule the next occurrence if recurring.
+
+        Calls task.mark_complete(), and if a next-occurrence Task is returned
+        (because the task has a daily or weekly frequency), adds it to the
+        owner's task list so it will appear in future generated plans.
+        """
+        next_task = task.mark_complete()
+        if next_task is not None:
+            self.owner.add_task(next_task)
 
     def view_plan(self) -> None:
         """Print a formatted version of today's schedule to the terminal."""
