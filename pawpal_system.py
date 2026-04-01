@@ -1,6 +1,23 @@
 from dataclasses import dataclass, field
 from datetime import datetime, date
+from enum import Enum
 from typing import Optional
+
+
+class Priority(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class TaskType(str, Enum):
+    FEEDING = "feeding"
+    WALKING = "walking"
+    GROOMING = "grooming"
+    VET = "vet"
+    MEDICATION = "medication"
+    PLAYTIME = "playtime"
+    OTHER = "other"
 
 
 @dataclass
@@ -12,32 +29,46 @@ class Pet:
     preferences: dict = field(default_factory=dict)
 
     def get_profile(self) -> dict:
-        pass
+        """Return a summary dict of all pet attributes."""
+        return {
+            "name": self.name,
+            "species": self.species,
+            "age": self.age,
+            "medical_notes": self.medical_notes,
+            "preferences": self.preferences,
+        }
 
     def update_preferences(self, preferences: dict) -> None:
-        pass
+        """Merge new key/value pairs into the pet's preferences."""
+        self.preferences.update(preferences)
 
     def add_medical_note(self, note: str) -> None:
-        pass
+        """Append a timestamped medical note to the pet's records."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        self.medical_notes.append(f"[{timestamp}] {note}")
 
 
 @dataclass
 class Task:
     title: str
-    task_type: str
+    task_type: TaskType
     duration: int  # in minutes
-    priority: str
+    priority: Priority
     due_time: datetime
+    pet: Optional["Pet"] = None
     completed: bool = False
 
     def mark_complete(self) -> None:
-        pass
+        """Mark this task as completed."""
+        self.completed = True
 
-    def update_priority(self, priority: str) -> None:
-        pass
+    def update_priority(self, priority: Priority) -> None:
+        """Update the task's priority level."""
+        self.priority = priority
 
     def reschedule(self, new_due_time: datetime) -> None:
-        pass
+        """Move the task's due time to a new datetime."""
+        self.due_time = new_due_time
 
 
 class Owner:
@@ -49,34 +80,98 @@ class Owner:
         self.tasks: list[Task] = []
 
     def add_pet(self, pet: Pet) -> None:
-        pass
+        """Add a pet to the owner's list of pets."""
+        self.pets.append(pet)
 
     def add_task(self, task: Task) -> None:
-        pass
+        """Add a task to the owner's task list."""
+        self.tasks.append(task)
 
     def view_tasks(self) -> list[Task]:
-        pass
+        """Return all tasks belonging to the owner."""
+        return self.tasks
 
     def update_availability(self, time_available: int) -> None:
-        pass
+        """Update the number of minutes the owner has available today."""
+        self.time_available = time_available
+
+    def get_all_pet_tasks(self) -> list[Task]:
+        """Return all tasks that are linked to any of the owner's pets."""
+        return [t for t in self.tasks if t.pet in self.pets]
 
 
-class DailyPlan:
-    def __init__(self, date: date, owner: Owner):
-        self.date = date
+class Scheduler:
+    def __init__(self, plan_date: date, owner: Owner):
+        """Initialize the scheduler for a specific owner and date."""
+        self.date = plan_date
         self.owner = owner
         self.scheduled_tasks: list[Task] = []
-        self.total_time: int = 0  # in minutes
         self.explanation: str = ""
 
+    @property
+    def total_time(self) -> int:
+        """Compute total scheduled time in minutes from scheduled tasks."""
+        return sum(t.duration for t in self.scheduled_tasks)
+
     def generate_plan(self) -> None:
-        pass
+        """Build a schedule from the owner's tasks, sorted by priority and due time, within the available time budget."""
+        self.scheduled_tasks = []
+
+        eligible = [
+            t for t in self.owner.tasks
+            if not t.completed and t.due_time.date() == self.date
+        ]
+        # Sort HIGH → MEDIUM → LOW, then by due_time within each group
+        priority_order = {Priority.HIGH: 0, Priority.MEDIUM: 1, Priority.LOW: 2}
+        eligible.sort(key=lambda t: (priority_order[t.priority], t.due_time))
+
+        skipped = []
+        for task in eligible:
+            if self.total_time + task.duration <= self.owner.time_available:
+                self.add_scheduled_task(task)
+            else:
+                skipped.append(task.title)
+
+        self._build_explanation(skipped)
 
     def add_scheduled_task(self, task: Task) -> None:
-        pass
+        """Append a task to the scheduled list."""
+        self.scheduled_tasks.append(task)
+
+    def _build_explanation(self, skipped: list[str]) -> None:
+        """Compose a human-readable explanation of how the plan was built."""
+        lines = [
+            f"Plan for {self.date} — {self.owner.name}",
+            f"Available time: {self.owner.time_available} min | Scheduled: {self.total_time} min",
+            f"Tasks scheduled: {len(self.scheduled_tasks)}",
+        ]
+        if skipped:
+            lines.append(f"Skipped (time budget exceeded): {', '.join(skipped)}")
+        self.explanation = "\n".join(lines)
 
     def get_explanation(self) -> str:
-        pass
+        """Return the plain-text explanation of the current plan."""
+        return self.explanation
 
     def view_plan(self) -> None:
-        pass
+        """Print a formatted version of today's schedule to the terminal."""
+        print(f"\n{'='*50}")
+        print(f"  Today's Schedule — {self.date}")
+        print(f"  Owner: {self.owner.name}  |  Available: {self.owner.time_available} min")
+        print(f"{'='*50}")
+
+        if not self.scheduled_tasks:
+            print("  No tasks scheduled.")
+        else:
+            for i, task in enumerate(self.scheduled_tasks, 1):
+                pet_label = f" [{task.pet.name}]" if task.pet else ""
+                status = "✓" if task.completed else "○"
+                due = task.due_time.strftime("%I:%M %p")
+                print(
+                    f"  {i}. {status} {task.title}{pet_label}"
+                    f" | {task.task_type.value} | {task.priority.value.upper()}"
+                    f" | {task.duration} min | due {due}"
+                )
+
+        print(f"{'='*50}")
+        print(f"  Total time: {self.total_time} min\n")
