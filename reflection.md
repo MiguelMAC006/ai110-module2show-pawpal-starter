@@ -7,6 +7,14 @@
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
+My UML design includes four main classes: Pet, Task, Owner, and DailyPlan.
+	•	The Pet class stores information about each pet, including its name, type, medical notes, and preferences. It is responsible for managing pet-specific details.
+	•	The Task class represents individual pet care activities such as feeding, walking, or giving medication. It handles task-related data like priority, duration, and completion status.
+	•	The Owner class represents the user and manages their pets, tasks, availability, and preferences. It acts as the central controller for organizing data.
+	•	The DailyPlan class is responsible for generating a daily schedule of tasks based on constraints like time and priority, and it provides an explanation for the chosen plan.
+
+Together, these classes separate responsibilities clearly: pets hold data, tasks define actions, the owner manages everything, and the daily plan handles scheduling and decision-making.
+
 **b. Design changes**
 
 - Did your design change during implementation?
