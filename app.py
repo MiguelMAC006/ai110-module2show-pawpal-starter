@@ -8,9 +8,11 @@ st.title("🐾 PawPal+")
 
 # ── Session state bootstrap ───────────────────────────────────────────────────
 # Streamlit re-runs top-to-bottom on every interaction.
-# Storing the Owner in st.session_state means it survives across reruns.
+# Storing Owner and Scheduler in session_state lets them survive reruns.
 if "owner" not in st.session_state:
     st.session_state.owner = None
+if "scheduler" not in st.session_state:
+    st.session_state.scheduler = None
 
 # ── Step 1: Create the Owner ──────────────────────────────────────────────────
 st.subheader("Owner Setup")
@@ -29,6 +31,7 @@ if submitted:
     else:
         st.session_state.owner.name = owner_name
         st.session_state.owner.update_availability(int(time_available))
+    st.session_state.scheduler = None  # invalidate cached schedule
     st.success(f"Owner **{owner_name}** saved with {time_available} min available.")
 
 owner: Owner | None = st.session_state.owner
@@ -61,7 +64,9 @@ if owner.pets:
     for pet in owner.pets:
         profile = pet.get_profile()
         notes = "; ".join(profile["medical_notes"]) or "None"
-        st.markdown(f"- **{profile['name']}** ({profile['species']}, age {profile['age']}) — Notes: {notes}")
+        st.markdown(
+            f"- **{profile['name']}** ({profile['species']}, age {profile['age']}) — Notes: {notes}"
+        )
 else:
     st.info("No pets yet. Add one above.")
 
@@ -79,10 +84,8 @@ with st.form("task_form"):
     priority = st.selectbox("Priority", [p.value for p in Priority], index=2)
     due_hour = st.slider("Due time (hour)", 0, 23, 8)
     due_minute = st.selectbox("Due time (minute)", [0, 15, 30, 45])
-
-    linked_pet_name = st.selectbox(
-        "Link to pet (optional)", ["None"] + pet_names
-    )
+    frequency = st.selectbox("Recurrence", ["None", "daily", "weekly"])
+    linked_pet_name = st.selectbox("Link to pet (optional)", ["None"] + pet_names)
     add_task_btn = st.form_submit_button("Add Task")
 
 if add_task_btn:
@@ -96,25 +99,54 @@ if add_task_btn:
         priority=Priority(priority),
         due_time=due_time,
         pet=linked_pet,
+        frequency=None if frequency == "None" else frequency,
     )
     owner.add_task(new_task)
+    st.session_state.scheduler = None  # invalidate cached schedule
     pet_label = f" for {linked_pet.name}" if linked_pet else ""
     st.success(f"Added task **{task_title}**{pet_label}.")
 
+# ── Filtered task list ────────────────────────────────────────────────────────
 if owner.tasks:
     st.markdown("**Current Tasks:**")
-    rows = []
-    for t in owner.tasks:
-        rows.append({
-            "Title": t.title,
-            "Type": t.task_type.value,
-            "Priority": t.priority.value,
-            "Duration (min)": t.duration,
-            "Due": t.due_time.strftime("%I:%M %p"),
-            "Pet": t.pet.name if t.pet else "—",
-            "Done": "✓" if t.completed else "○",
-        })
-    st.table(rows)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        filter_pet = st.selectbox("Filter by pet", ["All"] + pet_names, key="filter_pet")
+    with col2:
+        filter_status = st.selectbox(
+            "Filter by status", ["All", "Pending", "Done"], key="filter_status"
+        )
+
+    # Use Scheduler.filter_tasks() to slice the task list
+    _filter_sched = Scheduler(plan_date=date.today(), owner=owner)
+    filter_kwargs: dict = {}
+    if filter_pet != "All":
+        filter_kwargs["pet_name"] = filter_pet
+    if filter_status == "Pending":
+        filter_kwargs["completed"] = False
+    elif filter_status == "Done":
+        filter_kwargs["completed"] = True
+    filtered = _filter_sched.filter_tasks(**filter_kwargs)
+
+    if filtered:
+        rows = []
+        for t in filtered:
+            rows.append(
+                {
+                    "Title": t.title,
+                    "Type": t.task_type.value,
+                    "Priority": t.priority.value,
+                    "Duration (min)": t.duration,
+                    "Due": t.due_time.strftime("%I:%M %p"),
+                    "Recurs": t.frequency or "—",
+                    "Pet": t.pet.name if t.pet else "—",
+                    "Done": "✓" if t.completed else "○",
+                }
+            )
+        st.table(rows)
+    else:
+        st.info("No tasks match the current filter.")
 else:
     st.info("No tasks yet. Add one above.")
 
@@ -127,17 +159,35 @@ if st.button("Generate Schedule"):
     if not owner.tasks:
         st.warning("Add at least one task before generating a schedule.")
     else:
-        scheduler = Scheduler(plan_date=date.today(), owner=owner)
-        scheduler.generate_plan()
+        new_scheduler = Scheduler(plan_date=date.today(), owner=owner)
+        new_scheduler.generate_plan()
+        st.session_state.scheduler = new_scheduler
 
-        if not scheduler.scheduled_tasks:
-            st.error("No tasks could be scheduled. Check due dates or available time.")
+scheduler: Scheduler | None = st.session_state.scheduler
+
+if scheduler is not None:
+    if not scheduler.scheduled_tasks:
+        st.error("No tasks could be scheduled. Check due dates or available time.")
+    else:
+        st.success(
+            f"Scheduled {len(scheduler.scheduled_tasks)} task(s) in {scheduler.total_time} min."
+        )
+
+        # ── Conflict warnings ─────────────────────────────────────────────────
+        conflicts = scheduler.detect_conflicts()
+        if conflicts:
+            st.markdown("**⚠ Scheduling conflicts detected — two tasks share the same time slot:**")
+            for warning in conflicts:
+                st.warning(warning)
         else:
-            st.success(f"Scheduled {len(scheduler.scheduled_tasks)} task(s) in {scheduler.total_time} min.")
+            st.success("No scheduling conflicts found.")
 
-            schedule_rows = []
-            for i, t in enumerate(scheduler.scheduled_tasks, 1):
-                schedule_rows.append({
+        # ── Sorted schedule table (chronological via sort_by_time) ────────────
+        st.markdown("**Today's schedule (chronological order):**")
+        schedule_rows = []
+        for i, t in enumerate(scheduler.sort_by_time(), 1):
+            schedule_rows.append(
+                {
                     "#": i,
                     "Task": t.title,
                     "Pet": t.pet.name if t.pet else "—",
@@ -145,19 +195,23 @@ if st.button("Generate Schedule"):
                     "Priority": t.priority.value.upper(),
                     "Duration": f"{t.duration} min",
                     "Due": t.due_time.strftime("%I:%M %p"),
-                })
-            st.table(schedule_rows)
+                    "Recurs": t.frequency or "—",
+                }
+            )
+        st.table(schedule_rows)
 
-            st.markdown("**Plan summary:**")
-            st.code(scheduler.get_explanation(), language=None)
+        st.markdown("**Plan summary:**")
+        st.code(scheduler.get_explanation(), language=None)
 
-            # Mark-complete buttons
-            st.markdown("**Mark tasks complete:**")
-            for t in scheduler.scheduled_tasks:
-                label = f"✓ Mark '{t.title}' complete"
-                if not t.completed:
-                    if st.button(label, key=f"complete_{t.title}"):
-                        t.mark_complete()
-                        st.rerun()
-                else:
-                    st.markdown(f"~~{t.title}~~ ✓")
+        # ── Mark-complete buttons ─────────────────────────────────────────────
+        # complete_task() is used (not mark_complete directly) so that recurring
+        # tasks automatically get their next occurrence added to the owner's list.
+        st.markdown("**Mark tasks complete:**")
+        for t in scheduler.scheduled_tasks:
+            if not t.completed:
+                if st.button(f"✓ Mark '{t.title}' complete", key=f"complete_{t.title}"):
+                    scheduler.complete_task(t)
+                    st.rerun()
+            else:
+                recur_note = f" (next {t.frequency} occurrence added)" if t.frequency else ""
+                st.markdown(f"~~{t.title}~~ ✓{recur_note}")

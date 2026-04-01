@@ -22,6 +22,24 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Features
+
+- **Owner & pet profiles** — Store owner availability and multiple pets with medical notes and preferences.
+- **Task management** — Add tasks with type, priority, duration, and due time; link each task to a specific pet.
+- **Sorting by time** — The generated schedule is always displayed in chronological order using `Scheduler.sort_by_time()`, so the pet owner sees tasks in the order they need to happen.
+- **Priority-aware scheduling** — `generate_plan()` fits tasks within the owner's available time budget, always scheduling HIGH-priority tasks before MEDIUM and LOW.
+- **Recurring tasks** — Tasks can be marked `daily` or `weekly`. Completing one automatically queues the next occurrence so nothing falls off the radar.
+- **Conflict detection** — `detect_conflicts()` scans the schedule in a single O(n) pass and surfaces a visible `st.warning` whenever two tasks share the exact same time slot.
+- **Filtered task view** — `filter_tasks()` lets the owner view tasks by pet name, completion status, or both without touching the schedule.
+- **Plain-English plan summary** — `get_explanation()` produces a human-readable summary of what was scheduled, how much time was used, and what was skipped.
+
+## 📸 Demo
+
+<!-- Replace the src paths below with your actual screenshot after running the app -->
+<a href="/course_images/ai110/pawpal_screenshot.png" target="_blank">
+  <img src='/course_images/ai110/pawpal_screenshot.png' title='PawPal App' width='' alt='PawPal App' class='center-block' />
+</a>
+
 ## Smarter Scheduling
 
 Phase 3 added four algorithmic improvements to the scheduler:
