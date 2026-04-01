@@ -50,3 +50,38 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+## Testing PawPal+
+
+### How to run tests
+
+```bash
+python -m pytest
+```
+
+Or for verbose output showing each test name:
+
+```bash
+python -m pytest -v
+```
+
+### What the tests cover
+
+The test suite in `tests/test_pawpal.py` contains **28 tests** across four classes:
+
+| Area | Tests |
+|---|---|
+| **Task** | `mark_complete`, `update_priority`, `reschedule`, recurrence returns `None` for one-off tasks |
+| **Pet** | `add_medical_note`, `update_preferences` merge behavior, `get_profile` keys |
+| **Owner** | `add_pet`, `add_task`, `update_availability` |
+| **Scheduler** | Time budget enforcement, priority ordering, skips completed tasks, `sort_by_time` (happy path + edge cases), daily/weekly recurrence, conflict detection, `filter_tasks` by pet name and completion status |
+
+Key edge cases verified:
+- `sort_by_time` returns `[]` when the schedule is empty
+- A pet owner with **no tasks** returns an empty list from `filter_tasks`
+- **Two tasks at the exact same time** trigger a conflict warning
+- Completing a **one-off task** does not create a follow-up task
+
+### Confidence Level
+
+★★★★★ — All 28 tests pass. The four Phase 3 features (sort, filter, recurrence, conflict detection) are each covered by multiple tests including happy paths and edge cases.
